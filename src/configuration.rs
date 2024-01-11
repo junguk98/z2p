@@ -40,10 +40,11 @@ impl DatabaseSettings {
             .username(&self.username)
             .password(&self.password.expose_secret())
             .port(self.port)
+            .ssl_mode(ssl_mode)
     }
     pub fn with_db(&self) -> PgConnectOptions {
         let options = self.without_db().database(&self.database_name);
-        options.log_statements(tracing_log::log::LevelFilter::Trace);
+        options.clone().log_statements(tracing_log::log::LevelFilter::Trace);
         options
     }
 }
