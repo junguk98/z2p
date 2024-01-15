@@ -1,6 +1,7 @@
 use sqlx::postgres::PgPool;
 use std::net::TcpListener;
 use z2p::configuration::get_configuration;
+use z2p::email_client::EmailClient;
 use z2p::startup::run;
 use z2p::telemetry::{get_subscriber, init_subscriber};
 
@@ -24,6 +25,16 @@ async fn main() -> std::io::Result<()> {
         configuration.application.host, configuration.application.port
     );
     let listener = TcpListener::bind(address)?;
-    run(listener, connection_pool)?.await?;
+
+    let sender_email = configuration.email_client.sender()
+        .expect("Invalid sender email address.");
+    let timeout = configuration.email_client.timeout();
+    let email_client = EmailClient::new(
+        configuration.email_client.base_url,
+        sender_email,
+        configuration.email_client.authorization_token,
+        timeout,
+    );
+    run(listener, connection_pool, email_client)?.await?;
     Ok(())
 }
