@@ -3,3 +3,4 @@
 tags
 .env
 configuration.yaml
+**/local.yaml
