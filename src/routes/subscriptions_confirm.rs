@@ -1,6 +1,7 @@
 use actix_web::{HttpResponse, web};
 use sqlx::PgPool;
 use uuid::Uuid;
+use crate::utils::Z2pError;
 
 
 #[derive(serde::Deserialize)]
@@ -16,18 +17,27 @@ pub async fn confirm(
     parameters: web::Query<Parameters>,
     pool: web::Data<PgPool>,
 ) -> HttpResponse {
-    let subscriber_id_option = match get_subscriber_id_from_token(&pool, &parameters.subscription_token).await {
-        Ok(subscriber_id_option) => subscriber_id_option,
-        Err(_) => return HttpResponse::InternalServerError().finish()
-    };
+    match handle_confirm(parameters, pool).await {
+        Err(e) => match e.downcast_ref() {
+            Some(Z2pError::Unauthorized) => HttpResponse::BadRequest().finish(),
+            _ => HttpResponse::InternalServerError().finish()
+        }
+
+        Ok(()) => HttpResponse::Ok().finish()
+    }
+}
+
+async fn handle_confirm(
+    parameters: web::Query<Parameters>,
+    pool: web::Data<PgPool>,
+) -> anyhow::Result<()> {
+    let subscriber_id_option = get_subscriber_id_from_token(&pool, &parameters.subscription_token).await?;
 
     match subscriber_id_option {
-        None => HttpResponse::Unauthorized().finish(),
+        None => Err(anyhow::anyhow!(Z2pError::Unauthorized)),
         Some(subscriber_id) => {
-            if confirm_subscriber(&pool, subscriber_id).await.is_err() {
-                return HttpResponse::InternalServerError().finish();
-            }
-            HttpResponse::Ok().finish()
+            confirm_subscriber(&pool, subscriber_id).await?;
+            Ok(())
         }
     }
 }
@@ -60,7 +70,8 @@ skip(subscription_token, pool)
 pub async fn get_subscriber_id_from_token(
     pool: &PgPool,
     subscription_token: &str,
-) -> Result<Option<Uuid>, sqlx::Error> {
+// ) -> Result<Option<Uuid>, sqlx::Error> {
+) -> anyhow::Result<Option<Uuid>> {
     let result =
         sqlx::query!(
             "SELECT subscriber_id FROM subscription_tokens \

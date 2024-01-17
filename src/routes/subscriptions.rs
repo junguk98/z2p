@@ -8,6 +8,7 @@ use uuid::Uuid;
 use crate::domain::{NewSubscriber, SubscriberEmail, SubscriberName};
 use crate::email_client::EmailClient;
 use crate::startup::ApplicationBaseUrl;
+use crate::utils::Z2pError;
 
 #[derive(serde::Deserialize)]
 pub struct FormData {
@@ -42,12 +43,9 @@ pub async fn subscribe(
     base_url: web::Data<ApplicationBaseUrl>,
 ) -> HttpResponse {
     match handle_subscribe(form, &pool, &email_client, &base_url).await {
-        Err(e) => {
-            println!("Error message <<{:?}>>", e);
-            if let "500" = e.to_string().as_ref() {
-                return HttpResponse::BadRequest().finish();
-            }
-            return HttpResponse::InternalServerError().finish();
+        Err(e) => match e.downcast_ref() {
+            Some(Z2pError::BadRequest) => HttpResponse::BadRequest().finish(),
+            _ => HttpResponse::InternalServerError().finish()
         }
         Ok(()) => HttpResponse::Ok().finish()
     }
@@ -62,7 +60,7 @@ async fn handle_subscribe(
     let new_subscriber = match form.0.try_into() {
         Ok(new_subscriber) => new_subscriber,
         Err(_) => {
-            return Err(anyhow::anyhow!("500"));
+            return Err(anyhow::anyhow!(Z2pError::BadRequest));
         }
     };
     let mut transaction = pool.begin().await?;
