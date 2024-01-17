@@ -17,6 +17,7 @@ pub struct FormData {
 
 impl TryFrom<FormData> for NewSubscriber {
     type Error = String;
+
     fn try_from(value: FormData) -> Result<Self, Self::Error> {
         let email = SubscriberEmail::parse(value.email)?;
         let name = SubscriberName::parse(value.name)?;
@@ -40,45 +41,44 @@ pub async fn subscribe(
     email_client: web::Data<EmailClient>,
     base_url: web::Data<ApplicationBaseUrl>,
 ) -> HttpResponse {
+    match handle_subscribe(form, &pool, &email_client, &base_url).await {
+        Err(e) => {
+            println!("Error message <<{:?}>>", e);
+            if let "500" = e.to_string().as_ref() {
+                return HttpResponse::BadRequest().finish();
+            }
+            return HttpResponse::InternalServerError().finish();
+        }
+        Ok(()) => HttpResponse::Ok().finish()
+    }
+}
+
+async fn handle_subscribe(
+    form: web::Form<FormData>,
+    pool: &web::Data<PgPool>,
+    email_client: &web::Data<EmailClient>,
+    base_url: &web::Data<ApplicationBaseUrl>,
+) -> anyhow::Result<()> {
     let new_subscriber = match form.0.try_into() {
         Ok(new_subscriber) => new_subscriber,
-        Err(_) => return HttpResponse::BadRequest().finish(),
+        Err(_) => {
+            return Err(anyhow::anyhow!("500"));
+        }
     };
-
-    let mut transaction = match pool.begin().await {
-        Ok(transaction) => transaction,
-        Err(_) => return HttpResponse::InternalServerError().finish()
-    };
-
-    let subscriber_id = match insert_subscriber(&mut transaction, &new_subscriber).await {
-        Ok(subscriber_id) => subscriber_id,
-        Err(_) => return HttpResponse::InternalServerError().finish(),
-    };
-
+    let mut transaction = pool.begin().await?;
+    let subscriber_id = insert_subscriber(&mut transaction, &new_subscriber).await?;
     let subscription_token = generate_subscription_token();
+    store_token(&mut transaction, subscriber_id, &subscription_token).await?;
+    transaction.commit().await?;
 
-    if store_token(&mut transaction, subscriber_id, &subscription_token)
-        .await
-        .is_err()
-    {
-        return HttpResponse::InternalServerError().finish();
-    }
-
-    if transaction.commit().await.is_err() {
-        return HttpResponse::InternalServerError().finish();
-    }
-
-    if send_confirmation_email(
+    send_confirmation_email(
         &email_client,
         new_subscriber,
         &base_url.0,
         &subscription_token)
-        .await
-        .is_err()
-    {
-        return HttpResponse::InternalServerError().finish();
-    }
-    HttpResponse::Ok().finish()
+        .await?;
+
+    Ok(())
 }
 
 #[tracing::instrument(

@@ -3209,6 +3209,7 @@ name = "z2p"
 version = "0.1.0"
 dependencies = [
  "actix-web",
+ "anyhow",
  "chrono",
  "claims",
  "config",
