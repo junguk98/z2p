@@ -1,14 +1,14 @@
-use actix_web::{web, HttpResponse};
-use actix_web::web::Data;
-use chrono::Utc;
-use rand::{Rng, thread_rng};
-use rand::distributions::Alphanumeric;
-use sqlx::{Executor, PgPool, Postgres, Transaction};
-use uuid::Uuid;
 use crate::domain::{NewSubscriber, SubscriberEmail, SubscriberName};
 use crate::email_client::EmailClient;
 use crate::startup::ApplicationBaseUrl;
 use crate::utils::Z2pError;
+use actix_web::web::Data;
+use actix_web::{web, HttpResponse};
+use chrono::Utc;
+use rand::distributions::Alphanumeric;
+use rand::{thread_rng, Rng};
+use sqlx::{Executor, PgPool, Postgres, Transaction};
+use uuid::Uuid;
 
 #[derive(serde::Deserialize)]
 pub struct FormData {
@@ -45,9 +45,9 @@ pub async fn subscribe(
     match handle_subscribe(form, &pool, &email_client, &base_url).await {
         Err(e) => match e.downcast_ref() {
             Some(Z2pError::BadRequest) => HttpResponse::BadRequest().finish(),
-            _ => HttpResponse::InternalServerError().finish()
-        }
-        Ok(()) => HttpResponse::Ok().finish()
+            _ => HttpResponse::InternalServerError().finish(),
+        },
+        Ok(()) => HttpResponse::Ok().finish(),
     }
 }
 
@@ -73,17 +73,21 @@ async fn handle_subscribe(
         &email_client,
         new_subscriber,
         &base_url.0,
-        &subscription_token)
-        .await?;
+        &subscription_token,
+    )
+    .await?;
 
     Ok(())
 }
 
 #[tracing::instrument(
-name = "Saving new subscriber details in the database",
-skip(new_subscriber, transaction)
+    name = "Saving new subscriber details in the database",
+    skip(new_subscriber, transaction)
 )]
-pub async fn insert_subscriber(transaction: &mut Transaction<'_, Postgres>, new_subscriber: &NewSubscriber) -> Result<Uuid, sqlx::Error> {
+pub async fn insert_subscriber(
+    transaction: &mut Transaction<'_, Postgres>,
+    new_subscriber: &NewSubscriber,
+) -> Result<Uuid, sqlx::Error> {
     let subscriber_id = Uuid::new_v4();
     let query = sqlx::query!(
         r#"
@@ -97,12 +101,10 @@ pub async fn insert_subscriber(transaction: &mut Transaction<'_, Postgres>, new_
         "pending_confirmation"
     );
 
-    transaction.execute(query)
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to execute query: {:?}", e);
-            e
-        })?;
+    transaction.execute(query).await.map_err(|e| {
+        tracing::error!("Failed to execute query: {:?}", e);
+        e
+    })?;
 
     Ok(subscriber_id)
 }
@@ -115,8 +117,7 @@ async fn send_confirmation_email(
 ) -> Result<(), reqwest::Error> {
     let confirmation_link = format!(
         "{}/subscriptions/confirm?subscription_token={}",
-        base_url,
-        subscription_token
+        base_url, subscription_token
     );
 
     let plain_body = format!(
@@ -131,15 +132,13 @@ async fn send_confirmation_email(
     );
 
     email_client
-        .send_email(
-            new_subscriber.email,
-            "Welcome!", &html_body, &plain_body,
-        ).await
+        .send_email(new_subscriber.email, "Welcome!", &html_body, &plain_body)
+        .await
 }
 
 #[tracing::instrument(
-name = "Store subscription token in the database",
-skip(subscriber_id, subscription_token, transaction)
+    name = "Store subscription token in the database",
+    skip(subscriber_id, subscription_token, transaction)
 )]
 pub async fn store_token(
     transaction: &mut Transaction<'_, Postgres>,
@@ -152,12 +151,10 @@ pub async fn store_token(
         subscription_token,
         subscriber_id
     );
-    transaction.execute(query)
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to execute query: {:?}", e);
-            e
-        })?;
+    transaction.execute(query).await.map_err(|e| {
+        tracing::error!("Failed to execute query: {:?}", e);
+        e
+    })?;
     Ok(())
 }
 

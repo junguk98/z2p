@@ -1,5 +1,5 @@
 use z2p::configuration::get_configuration;
-use z2p::startup::{Application};
+use z2p::startup::Application;
 use z2p::telemetry::{get_subscriber, init_subscriber};
 
 #[tokio::main]

@@ -1,8 +1,8 @@
-use sqlx::postgres::{PgConnectOptions, PgSslMode};
+use crate::domain::SubscriberEmail;
 use secrecy::{ExposeSecret, Secret};
 use serde_aux::field_attributes::deserialize_number_from_string;
+use sqlx::postgres::{PgConnectOptions, PgSslMode};
 use sqlx::ConnectOptions;
-use crate::domain::SubscriberEmail;
 
 #[derive(serde::Deserialize, Clone, Debug)]
 pub struct Settings {
@@ -39,7 +39,9 @@ impl DatabaseSettings {
     }
     pub fn with_db(&self) -> PgConnectOptions {
         let options = self.without_db().database(&self.database_name);
-        options.clone().log_statements(tracing_log::log::LevelFilter::Trace);
+        options
+            .clone()
+            .log_statements(tracing_log::log::LevelFilter::Trace);
         options
     }
 }
@@ -70,10 +72,8 @@ impl EmailClientSettings {
     }
 }
 
-
 pub fn get_configuration() -> Result<Settings, config::ConfigError> {
-    let base_path = std::env::current_dir()
-        .expect("Failed to determine the current directory");
+    let base_path = std::env::current_dir().expect("Failed to determine the current directory");
     let configuration_directory = base_path.join("configuration");
 
     // Detect the running environment.
@@ -84,16 +84,16 @@ pub fn get_configuration() -> Result<Settings, config::ConfigError> {
         .expect("Failed to parse APP_ENVIRONMENT.");
     let environment_filename = format!("{}.yaml", environment.as_str());
     let settings = config::Config::builder()
-        .add_source(
-            config::File::from(configuration_directory.join("base.yaml"))
-        )
-        .add_source(
-            config::File::from(configuration_directory.join(environment_filename))
-        )
+        .add_source(config::File::from(
+            configuration_directory.join("base.yaml"),
+        ))
+        .add_source(config::File::from(
+            configuration_directory.join(environment_filename),
+        ))
         .add_source(
             config::Environment::with_prefix("APP")
                 .prefix_separator("_")
-                .separator("__")
+                .separator("__"),
         )
         .build()?;
 
@@ -109,7 +109,7 @@ impl Environment {
     pub fn as_str(&self) -> &'static str {
         match self {
             Environment::Local => "local",
-            Environment::Production => "production"
+            Environment::Production => "production",
         }
     }
 }
